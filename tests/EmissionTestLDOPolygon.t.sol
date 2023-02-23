@@ -8,39 +8,45 @@ import {IAaveIncentivesController} from '../src/interfaces/IAaveIncentivesContro
 
 import {IEmissionManager, ITransferStrategyBase, RewardsDataTypes, IEACAggregatorProxy} from '../src/interfaces/IEmissionManager.sol';
 import {BaseTest} from './utils/BaseTest.sol';
+import {IMockOracle} from './utils/IMockOracle.sol';
 
-contract EmissionTestMATICXPolygon is BaseTest {
+
+contract EmissionTestLDOPolygon is BaseTest {
   /// @dev Used to simplify the definition of a program of emissions
   /// @param asset The asset on which to put reward on, usually Aave aTokens or vTokens (variable debt tokens)
   /// @param emission Total emission of a `reward` token during the whole distribution duration defined
-  /// E.g. With an emission of 10_000 MATICX tokens during 1 month, an emission of 50% for variableDebtPolWMATIC would be
-  /// 10_000 * 1e18 * 50% / 30 days in seconds = 1_000 * 1e18 / 2_592_000 = ~ 0.0003858 * 1e18 MATICX per second
+  /// E.g. With an emission of 10_000 LDO tokens during 1 month, an emission of 50% for variableDebtPolstMATIC would be
+  /// 10_000 * 1e18 * 50% / 30 days in seconds = 1_000 * 1e18 / 2_592_000 = ~ 0.0003858 * 1e18 LDO per second
   struct EmissionPerAsset {
     address asset;
     uint256 emission;
   }
 
-  address constant EMISSION_ADMIN = 0x0c54a0BCCF5079478a144dBae1AFcb4FEdf7b263; // Polygon Foundation
-  address constant REWARD_ASSET = AaveV3PolygonAssets.MaticX_UNDERLYING;
+  address constant EMISSION_ADMIN = 0x87D93d9B2C672bf9c9642d853a8682546a5012B5; // LDO multi-sig
+  address constant REWARD_ASSET = 0xC3C7d422809852031b44ab29EEC9F1EfF2A58756;
   IEACAggregatorProxy constant REWARD_ORACLE =
-    IEACAggregatorProxy(AaveV3PolygonAssets.MaticX_ORACLE);
+    IEACAggregatorProxy(0xfb7559d168286DdAf38B862Ac0ACF16E01BD7C45);
 
-  /// @dev already deployed and configured for the both the MATICX asset and the 0x0c54a0BCCF5079478a144dBae1AFcb4FEdf7b263
+  /// @dev already deployed and configured for the both the stMATIC asset and the 0x0c54a0BCCF5079478a144dBae1AFcb4FEdf7b263
   /// EMISSION_ADMIN
   ITransferStrategyBase constant TRANSFER_STRATEGY =
-    ITransferStrategyBase(0x53F57eAAD604307889D87b747Fc67ea9DE430B01);
+    ITransferStrategyBase(0xc62F9c7A785856141FC282C133fF4B4895179c0B);
 
-  uint256 constant TOTAL_DISTRIBUTION = 60_000 ether; // 10'000 MATICX/month, 6 months
-  uint88 constant DURATION_DISTRIBUTION = 180 days;
+  uint256 constant TOTAL_DISTRIBUTION = 10_000 ether; // 10'000 stMATIC/month, 6 months
+  uint88 constant DURATION_DISTRIBUTION = 60 days;
 
-  address MATICX_WHALE = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
-  address vWMATIC_WHALE = 0xe52F5349153b8eb3B89675AF45aC7502C4997E6A;
+  address LDO_WHALE = 0xD0c417aAB37c6b3ACf93dA6036bFE29963C5B3D9;
+  address vstMATIC_WHALE = 0xC9c6Fc48a6fA8D7F06699B78EB46C908751966Df;
 
   function setUp() public {
-    vm.createSelectFork(vm.rpcUrl('polygon'), 39622422);
+    vm.createSelectFork(vm.rpcUrl('polygon'));
   }
 
   function test_activation() public {
+    vm.startPrank(0x2981b6be80a1Efe9869EbFa5bCA895959C8312e1);
+    IMockOracle(address(REWARD_ORACLE)).setAnswer(3150000000000000000);
+    vm.stopPrank();
+
     vm.startPrank(EMISSION_ADMIN);
     /// @dev IMPORTANT!!
     /// The emissions admin should have REWARD_ASSET funds, and have approved the TOTAL_DISTRIBUTION
@@ -50,6 +56,10 @@ contract EmissionTestMATICXPolygon is BaseTest {
     /// accrue more, but that is a decision of the emission's admin
     IERC20(REWARD_ASSET).approve(address(TRANSFER_STRATEGY), TOTAL_DISTRIBUTION);
 
+
+
+    // REWARD_ORACLE.decimals();
+    // require(TRANSFER_STRATEGY.getRewardsAdmin() == REWARD_ASSET, "Errorrrrrrrrrrrrrrrr");
     IEmissionManager(AaveV3Polygon.EMISSION_MANAGER).configureAssets(_getAssetConfigs());
 
     emit log_named_bytes(
@@ -62,30 +72,30 @@ contract EmissionTestMATICXPolygon is BaseTest {
 
     vm.stopPrank();
 
-    vm.startPrank(MATICX_WHALE);
-    IERC20(REWARD_ASSET).transfer(EMISSION_ADMIN, 50_000 ether);
+    vm.startPrank(LDO_WHALE);
+    IERC20(REWARD_ASSET).transfer(EMISSION_ADMIN, 15_000 ether);
 
     vm.stopPrank();
 
-    vm.startPrank(vWMATIC_WHALE);
+    vm.startPrank(vstMATIC_WHALE);
 
     vm.warp(block.timestamp + 30 days);
 
     address[] memory assets = new address[](1);
-    assets[0] = AaveV3PolygonAssets.WMATIC_V_TOKEN;
+    assets[0] = AaveV3PolygonAssets.stMATIC_A_TOKEN;
 
-    uint256 balanceBefore = IERC20(REWARD_ASSET).balanceOf(vWMATIC_WHALE);
+    uint256 balanceBefore = IERC20(REWARD_ASSET).balanceOf(vstMATIC_WHALE);
 
     IAaveIncentivesController(AaveV3Polygon.DEFAULT_INCENTIVES_CONTROLLER).claimRewards(
       assets,
       type(uint256).max,
-      vWMATIC_WHALE,
+      vstMATIC_WHALE,
       REWARD_ASSET
     );
 
-    uint256 balanceAfter = IERC20(REWARD_ASSET).balanceOf(vWMATIC_WHALE);
+    uint256 balanceAfter = IERC20(REWARD_ASSET).balanceOf(vstMATIC_WHALE);
 
-    uint256 deviationAccepted = 1300 ether; // Approx estimated rewards with current emission in 1 month
+    uint256 deviationAccepted = 2000 ether; // Approx estimated rewards with current emission in 1 month
     assertApproxEqAbs(
       balanceBefore,
       balanceAfter,
@@ -121,7 +131,7 @@ contract EmissionTestMATICXPolygon is BaseTest {
   function _getEmissionsPerAsset() internal pure returns (EmissionPerAsset[] memory) {
     EmissionPerAsset[] memory emissionsPerAsset = new EmissionPerAsset[](1);
     emissionsPerAsset[0] = EmissionPerAsset({
-      asset: AaveV3PolygonAssets.WMATIC_V_TOKEN,
+      asset: AaveV3PolygonAssets.stMATIC_A_TOKEN,
       emission: TOTAL_DISTRIBUTION // 100% of the distribution
     });
 
